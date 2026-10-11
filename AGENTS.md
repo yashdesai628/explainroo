@@ -10,7 +10,7 @@ drawing can appear on a word the voice says. A voice model (Kokoro) reads the
 script on this computer. Whisper listens to the recording and writes down
 when each word is spoken. Chrome draws the frames in the background.
 explainroo adds music and sound effects, and ffmpeg makes the MP4. You need
-no API key unless the user wants AI images.
+no API key unless the user wants AI images or an ElevenLabs voice.
 
 The full documentation for people is at https://www.explainroo.com/docs/.
 
@@ -213,6 +213,37 @@ Narration for this scene. [#marker] A marker names a moment you can animate on.
 - **Real examples.** A command you can run, a number with its source or a
   picture of the real screen is better than three boxes with general words.
 - **A clear last frame** that shows the main point.
+
+## ElevenLabs voice
+
+explainroo can narrate with ElevenLabs instead of Kokoro. It costs ElevenLabs
+credits on the user's account, about one credit per character of narration.
+Set `ELEVENLABS_API_KEY` in the environment or put `ELEVENLABS_API_KEY=...` in
+the `.env` file in the explainroo folder. Never print the key, and never put
+it in a script, a commit or a log.
+
+With a key, every project with the default `"tts": "auto"` uses ElevenLabs.
+Set `"tts": "kokoro"` to keep the local voice, or `"tts": "elevenlabs"` to
+fail loudly when the key is missing. Pick the voice and model in `video.json`:
+
+```json
+{
+  "tts": "elevenlabs",
+  "elevenlabs": { "voice": "XrExE9yKIg1WjnnlVkGX", "model": "eleven_multilingual_v2", "stability": 0.5, "similarity": 0.75 }
+}
+```
+
+- `voice` is an ElevenLabs voice id from the user's voice library. The
+  default is Matilda, a premade American English narrator.
+- ElevenLabs sends the time of every character with the audio, so word cues
+  and `[#markers]` use its timings. Whisper still listens to each clip for
+  the speech check when it is installed. Without it, `voice` prints "not
+  checked" and you should look at a `sheet` to confirm pictures land on their words.
+- `speed` 0.9 (the default) maps to ElevenLabs' normal speed 1.0. ElevenLabs
+  accepts 0.7 to 1.2, so `speed` times `pace` is clamped to that range.
+- `explainroo say "text" --tts elevenlabs --voice <id>` makes a sample.
+- Behind an HTTPS proxy (some cloud sandboxes), run Node with
+  `NODE_USE_ENV_PROXY=1` so its requests use the proxy.
 
 ## Images
 
@@ -475,7 +506,9 @@ videos/<name>/
 | `theme` | `paper` | `paper`, `clean`, `chalk`, `blueprint`, `midnight` |
 | `size` | `16:9` | a platform (`youtube`, `shorts`, `tiktok`, `reels`, `vertical`, `instagram`, `linkedin`, `square`), `16:9`, `9:16`, `1:1`, `4:5` or `WIDTHxHEIGHT` |
 | `fps` | 30 | 24, 25, 30, 50 or 60 |
-| `voice` | `af_heart` | see `explainroo voices` |
+| `tts` | `"auto"` | `"auto"` (ElevenLabs when `ELEVENLABS_API_KEY` is set, otherwise Kokoro), `"kokoro"` or `"elevenlabs"` |
+| `voice` | `af_heart` | the Kokoro voice, see `explainroo voices` |
+| `elevenlabs` | none | `{ "voice", "model", "stability", "similarity" }`, see [ElevenLabs voice](#elevenlabs-voice) |
 | `speed` | 0.9 | voice speed only, 0.6 to 1.6 |
 | `pace` | 1 | speed of the whole video (voice, pauses, animations), 0.7 to 1.6 |
 | `music` | `true` | `true` (the look's style), `warm`, `upbeat`, `calm`, `tech`, `playful`, `{ "style", "volume" }` or `false` |
