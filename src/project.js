@@ -34,7 +34,9 @@ export const DEFAULTS = {
   theme: 'paper',
   size: '16:9',
   fps: 30,
+  tts: 'auto',
   voice: 'af_heart',
+  elevenlabs: null,
   speed: 0.9,
   pace: 1,
   music: true,
@@ -84,6 +86,16 @@ export function normalizeConfig(raw) {
   const unknown = Object.keys(raw).filter((k) => !(k in DEFAULTS) && !k.startsWith('_'));
   if (unknown.length) fail(`video.json has unknown setting(s): ${unknown.join(', ')}. Known: ${Object.keys(DEFAULTS).join(', ')}`);
   if (!THEMES.includes(cfg.theme)) fail(`theme must be one of ${THEMES.join(', ')}, not "${cfg.theme}"`);
+  if (!['auto', 'kokoro', 'elevenlabs'].includes(cfg.tts)) fail(`tts must be "auto", "kokoro" or "elevenlabs", not "${cfg.tts}"`);
+  if (cfg.elevenlabs !== null) {
+    const e = cfg.elevenlabs;
+    if (typeof e !== 'object' || Array.isArray(e)) fail('elevenlabs must be an object like { "voice": "<voice id>", "model": "eleven_multilingual_v2" }');
+    const known = ['voice', 'model', 'stability', 'similarity'];
+    const extra = Object.keys(e).filter((k) => !known.includes(k));
+    if (extra.length) fail(`elevenlabs has unknown setting(s): ${extra.join(', ')}. Known: ${known.join(', ')}`);
+    for (const k of ['voice', 'model']) if (k in e && !(typeof e[k] === 'string' && /^[\w-]+$/.test(e[k]))) fail(`elevenlabs.${k} must be an ElevenLabs id`);
+    for (const k of ['stability', 'similarity']) if (k in e && !(e[k] >= 0 && e[k] <= 1)) fail(`elevenlabs.${k} must be between 0 and 1`);
+  }
   if (!VOICES[cfg.voice]) fail(`voice "${cfg.voice}" does not exist. Run "explainroo voices" for the list.`);
   if (!(cfg.speed >= 0.6 && cfg.speed <= 1.6)) fail('speed must be between 0.6 and 1.6');
   if (!(cfg.pace >= 0.7 && cfg.pace <= 1.6)) fail('pace must be between 0.7 and 1.6 (1 is normal, 1.3 is 30% faster)');

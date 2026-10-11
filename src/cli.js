@@ -13,6 +13,7 @@ import { writeWav } from './wav.js';
 import { ffmpegVersion } from './ffmpeg.js';
 import { findChrome } from './browser.js';
 import { generateImage, imageLog, imageSpend, IMAGE_MODELS } from './images.js';
+import { loadElevenLabs, elevenlabsKey, elevenlabsSpeed, ELEVENLABS_DEFAULTS } from './elevenlabs.js';
 
 const VERSION = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8')).version;
 
@@ -35,8 +36,12 @@ Images (optional, needs an OpenRouter API key)
                         (--model best|cheap, --aspect 16:9, --ref assets/a.png,assets/b.png, --no-style)
   images [project]      list generated images and what they cost
 
+Voice: Kokoro runs locally. Set ELEVENLABS_API_KEY to narrate with ElevenLabs
+instead ("tts" in video.json picks one: auto, kokoro or elevenlabs).
+
 Reference
   voices                list voices; "explainroo say 'text' --voice am_michael" to hear one
+                        ("say 'text' --tts elevenlabs [--voice <voice id>]" for ElevenLabs)
   themes                list looks
   formats               list sizes for YouTube, Shorts, TikTok, Reels, Instagram, LinkedIn
   icons <word…>         search the 1,800+ built-in icons
@@ -96,9 +101,9 @@ export async function main(argv) {
         const { voices, timeline } = await prepare(project, { log, force: !!flags.force });
         const rows = project.script.scenes.map((s) => {
           const v = voices[s.id];
-          return { scene: s.id, voice: v.duration, confirmed: v.matchRate, unconfirmed: v.unmatched, marks: v.marks };
+          return { scene: s.id, voice: v.duration, confirmed: v.matchRate, checked: v.speechCheck !== false, unconfirmed: v.unmatched, marks: v.marks };
         });
-        print(rows.map((r) => `${r.scene.padEnd(18)} ${r.voice.toFixed(1).padStart(5)}s  ${Math.round(r.confirmed * 100)}% confirmed${r.unconfirmed.length ? '  unconfirmed: ' + r.unconfirmed.slice(0, 6).join(', ') : ''}`).join('\n') + `\ntotal ${timeline.duration.toFixed(1)}s`, { scenes: rows, duration: timeline.duration });
+        print(rows.map((r) => `${r.scene.padEnd(18)} ${r.voice.toFixed(1).padStart(5)}s  ${r.checked ? `${Math.round(r.confirmed * 100)}% confirmed` : 'not checked'}${r.unconfirmed.length ? '  unconfirmed: ' + r.unconfirmed.slice(0, 6).join(', ') : ''}`).join('\n') + `\ntotal ${timeline.duration.toFixed(1)}s`, { scenes: rows, duration: timeline.duration });
         return 0;
       }
       case 'preview': return preview(pos[0], flags, log);
@@ -278,7 +283,16 @@ async function preview(dir, flags, log) {
 }
 
 async function say(text, flags, log, print) {
-  if (!text) throw new ProjectError('usage: explainroo say "text to speak" [--voice af_heart] [--speed 1] [--out sample.wav]');
+  if (!text) throw new ProjectError('usage: explainroo say "text to speak" [--voice af_heart] [--speed 1] [--out sample.wav] [--tts elevenlabs]');
+  if (flags.tts === 'elevenlabs') {
+    const voice = typeof flags.voice === 'string' ? flags.voice : ELEVENLABS_DEFAULTS.voice;
+    const tts = loadElevenLabs({ elevenlabs: { voice } }, process.cwd());
+    const audio = await tts.generate(text, { speed: elevenlabsSpeed(num(flags.speed, 'speed') ?? 0.9) });
+    const out = path.resolve(flags.out || `elevenlabs-${voice}.wav`);
+    writeWav(out, audio.audio, audio.sampling_rate);
+    print(out, { file: out, voice, tts: 'elevenlabs' });
+    return 0;
+  }
   const voice = flags.voice || 'af_heart';
   if (!VOICES[voice]) throw new ProjectError(`voice "${voice}" does not exist. Run "explainroo voices".`);
   const tts = await loadTTS({ log });
@@ -339,6 +353,8 @@ async function doctor(flags, log, print) {
     await loadASR({ log });
   }
   add('voice model', has('Kokoro-82M-v1.0-ONNX'), has('Kokoro-82M-v1.0-ONNX') ? `Kokoro 82M (${ttsDtype()}) in ${models}` : 'not downloaded yet; "explainroo doctor --fetch" or the first voice run fetches it');
+  const elKey = !!elevenlabsKey(process.cwd());
+  add('elevenlabs', true, elKey ? 'ELEVENLABS_API_KEY found; projects with "tts": "auto" narrate with ElevenLabs' : 'optional; set ELEVENLABS_API_KEY to narrate with ElevenLabs');
   add('speech check model', has('whisper-base.en_timestamped'), has('whisper-base.en_timestamped') ? 'Whisper base.en' : 'not downloaded yet; fetched on first use');
   const ok = rows.every((r) => r.ok || r.name.includes('model'));
   print(rows.map((r) => `${r.ok ? 'ok  ' : 'FAIL'} ${r.name.padEnd(20)} ${r.detail}`).join('\n'), { ok, checks: rows });
